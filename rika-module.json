@@ -1,0 +1,32 @@
+{
+	"id": "rika-learn",
+	"name": "Learn",
+	"version": "0.4.0-rika.1",
+	"api": 1,
+	"description": "Turn any topic into a step-by-step learning roadmap with hand-picked resources, flashcards and study sessions.",
+	"license": "AGPL-3.0-only",
+	"kind": "process",
+	"process": {
+		"command": ["node", "server.js"],
+		"cwd": ".",
+		"env": {
+			"LH_DATA_DIR": "{data}",
+			"LH_AUTH_FILE": "{data}/auth.json",
+			"PORT": "{port}",
+			"HOSTNAME": "127.0.0.1",
+			"NODE_ENV": "production",
+			"NEXT_TELEMETRY_DISABLED": "1",
+			"LH_START_VIEW": "learn"
+		},
+		"health": "/",
+		"ready_timeout_s": 30
+	},
+	"view": {
+		"id": "learn",
+		"label": "Learn",
+		"icon": "graduation-cap",
+		"group": "study",
+		"first": true,
+		"ui": "iframe"
+	}
+}

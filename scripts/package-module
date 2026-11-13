@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# package-module — build the rika module package for rika's module loader (api 1).
+#
+#   scripts/package-module [--skip-build]
+#
+# Writes dist/module/rika-learn-<version>.tar.gz whose ROOT holds server.js
+# (the Next standalone server) and rika-module.json, plus
+# dist/module/rika-learn-<version>.tar.gz.sha256 ("<hex>  <filename>").
+# --skip-build repackages an existing .next/standalone without `next build`.
+#
+# The tarball carries the native binaries of the machine that built it
+# (canvas/resvg platform packages), so build on the platform rika runs on.
+set -euo pipefail
+
+usage() {
+	sed -n '2,12s/^# \{0,1\}//p' "$0"
+}
+
+die() {
+	echo "[package-module] $*" >&2
+	exit 1
+}
+
+skip_build=0
+for arg in "$@"; do
+	case "$arg" in
+		--skip-build) skip_build=1 ;;
+		-h | --help)
+			usage
+			exit 0
+			;;
+		*) die "unknown argument: $arg (try --help)" ;;
+	esac
+done
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$root"
+
+version="$(node -p 'require("./package.json").version')"
+read -r manifest_id manifest_version < <(node -p 'const m = require("./rika-module.json"); `${m.id} ${m.version}`')
+[[ "$manifest_version" == "$version" ]] || die "rika-module.json version $manifest_version does not match package.json version $version"
+[[ "$manifest_id" == "rika-learn" ]] || die "rika-module.json id must be rika-learn, got $manifest_id"
+
+asset="${manifest_id}-${version}.tar.gz"
+out_dir="$root/dist/module"
+out="$out_dir/$asset"
+
+if [[ "$skip_build" -eq 0 ]]; then
+	npx next build
+fi
+# Copies public/ and .next/static into the standalone and refuses leaked
+# data/ or dev secrets. Idempotent, so it also runs for --skip-build.
+node scripts/build-server.mjs
+
+stage="$(mktemp -d "${TMPDIR:-/tmp}/rika-learn-module.XXXXXX")"
+trap 'rm -rf "$stage"' EXIT
+
+cp -a .next/standalone/. "$stage/"
+cp rika-module.json LICENSE NOTICE README.md "$stage/"
+[[ -f "$stage/server.js" ]] || die "server.js missing from the staged package"
+
+# Links must stay inside the package: rika extracts it into its own module
+# directory, so absolute or escaping targets would point at the build machine.
+while IFS= read -r -d '' link; do
+	target="$(readlink "$link")"
+	[[ "$target" != /* ]] || die "absolute symlink in package: ${link#"$stage"/} -> $target"
+	resolved="$(realpath -m "$link")"
+	[[ "$resolved" == "$stage"/* ]] || die "symlink escapes the package root: ${link#"$stage"/} -> $target"
+done < <(find "$stage" -type l -print0)
+
+mkdir -p "$out_dir"
+rm -f "$out" "$out.sha256"
+
+# Deterministic-ish: sorted names, fixed owner, commit time as mtime, and
+# no gzip timestamp. Entries are named without a "./" prefix.
+mtime="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct 2>/dev/null || date +%s)}"
+mapfile -t entries < <(cd "$stage" && find . -mindepth 1 -maxdepth 1 -printf '%P\n' | LC_ALL=C sort)
+tar --create --file=- --directory="$stage" \
+	--sort=name --owner=0 --group=0 --numeric-owner \
+	--mtime="@$mtime" --mode='u+rwX,go+rX,go-w' \
+	-- "${entries[@]}" | gzip -9 -n >"$out"
+
+# Re-check the archive itself: no absolute or parent-relative entry names,
+# and the manifest at the root names exactly this file.
+listing="$(tar -tzf "$out")"
+while IFS= read -r name; do
+	[[ "$name" != /* ]] || die "absolute path in archive: $name"
+	[[ "/$name/" != */../* ]] || die "parent-relative path in archive: $name"
+done <<<"$listing"
+grep -qx 'server.js' <<<"$listing" || die "server.js is not at the archive root"
+grep -qx 'rika-module.json' <<<"$listing" || die "rika-module.json is not at the archive root"
+tar -xzOf "$out" rika-module.json | node -e '
+	const manifest = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+	const expected = process.argv[1];
+	const named = `${manifest.id}-${manifest.version}.tar.gz`;
+	if (named !== expected) {
+		console.error(`[package-module] archived manifest names ${named}, but the file is ${expected}`);
+		process.exit(1);
+	}
+' "$asset"
+
+if command -v sha256sum >/dev/null; then
+	(cd "$out_dir" && sha256sum "$asset" >"$asset.sha256")
+else
+	(cd "$out_dir" && shasum -a 256 "$asset" >"$asset.sha256")
+fi
+
+echo "$out"
+echo "$out.sha256"

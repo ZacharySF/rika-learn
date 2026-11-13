@@ -1,0 +1,93 @@
+name: rika module release
+
+# Publishes the rika module package (rika-module.json + standalone server)
+# for rika's module loader: a `v<version>` tag builds, gates, packages and
+# attaches rika-learn-<version>.tar.gz and its .sha256 to the GitHub release.
+# Manual runs are artifact-only and NEVER create or modify a release.
+#
+# The bundle carries linux-x64 native binaries (@napi-rs/canvas, resvg):
+# it is built on ubuntu, matching rika's Linux desktop.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Serialize runs for the same ref; never cancel an upload in flight.
+concurrency:
+  group: module-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  package:
+    name: Gate and package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "26"
+          cache: npm
+      - run: npm ci
+      - name: Read the package version
+        id: version
+        run: echo "version=$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
+      - name: Tag must match package.json
+        if: github.event_name == 'push'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
+            echo "Release tag $GITHUB_REF_NAME must equal v$VERSION" >&2
+            exit 1
+          fi
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run lint
+      - name: Package the module
+        run: scripts/package-module
+      - uses: actions/upload-artifact@v7
+        with:
+          name: rika-learn-module-${{ steps.version.outputs.version }}
+          path: |
+            dist/module/rika-learn-${{ steps.version.outputs.version }}.tar.gz
+            dist/module/rika-learn-${{ steps.version.outputs.version }}.tar.gz.sha256
+          if-no-files-found: error
+
+  release:
+    name: Attach to the GitHub release
+    needs: package
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: rika-learn-module-${{ needs.package.outputs.version }}
+          path: dist/module
+      - name: Verify the checksum
+        working-directory: dist/module
+        run: sha256sum -c "rika-learn-${{ needs.package.outputs.version }}.tar.gz.sha256"
+      - name: Create or update the release and upload both assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.package.outputs.version }}
+        run: |
+          asset="dist/module/rika-learn-$VERSION.tar.gz"
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --verify-tag \
+              --title "Learn $VERSION" \
+              --notes "rika module package for Learn $VERSION. Install it from rika's module settings; the .sha256 file verifies the download."
+          fi
+          gh release upload "$GITHUB_REF_NAME" "$asset" "$asset.sha256" --clobber
