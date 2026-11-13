@@ -20,6 +20,7 @@ import {
 	layoutStarMap,
 	type Roadmap,
 	roadmapTopicStatuses,
+	STAR_LABEL_FONT_PX,
 	STAR_STATUS_LABEL,
 	type StageSpot,
 	type StarSpot,
@@ -41,9 +42,10 @@ const MIN_HEIGHT = 420;
 const MAX_HEIGHT = 760;
 const ZOOM_STEP = 1.5;
 const ZOOM_MAX = 6;
-/** Star titles show once two stars sit at least this many pixels apart. */
+/** Star titles show once two stars sit at least this many pixels apart
+ *  (and only where the layout found them a free spot); closer than that the
+ *  map would be a wall of text, so titles wait for hover, focus or a click. */
 const STAR_LABEL_UNIT_PX = 40;
-const STAR_LABEL_MAX_CHARS = 22;
 
 /** Box height: taller for big roadmaps (their spiral is round, not wide)
  *  and for phone-width iframes (so the spiral has room). */
@@ -52,25 +54,26 @@ function boxHeight(width: number, stages: number): number {
 	return Math.round(Math.min(Math.max(width * aspect, MIN_HEIGHT), MAX_HEIGHT));
 }
 
-/** Star titles point away from their cluster's centre (right-hand stars
- *  label to the right, and so on), so neighbouring labels rarely collide. */
-function starLabelSpot(
-	star: StarSpot,
-	stage: StageSpot | undefined,
-	unit: number,
-): { x: number; y: number; anchor: "start" | "middle" | "end" } {
-	const below = { x: 0, y: star.size * 3.4 + 12, anchor: "middle" as const };
-	if (!stage) return below;
-	const dx = star.x - stage.x;
-	const dy = star.y - stage.y;
-	const d = Math.hypot(dx, dy);
-	if (d < unit * 0.5) return below;
-	const ux = dx / d;
-	const uy = dy / d;
-	const gap = star.size * 2.6 + 6;
-	if (ux > 0.4) return { x: gap, y: uy * gap * 0.6 + 4, anchor: "start" };
-	if (ux < -0.4) return { x: -gap, y: uy * gap * 0.6 + 4, anchor: "end" };
-	return uy < 0 ? { x: 0, y: -(star.size * 3.4 + 6), anchor: "middle" } : below;
+/** A star's title, drawn where the layout's collision pass put it. */
+function StarTitle({ star, dim }: { star: StarSpot; dim: boolean }) {
+	return (
+		<text
+			x={star.label.x}
+			y={star.label.y}
+			textAnchor={star.label.anchor}
+			fontSize={STAR_LABEL_FONT_PX}
+			fill={dim ? "#9a98a6" : "#e4e2ec"}
+			stroke="#0b0b0f"
+			strokeWidth={3}
+			strokeOpacity={0.85}
+			paintOrder="stroke"
+			className="pointer-events-none"
+			aria-hidden="true"
+			data-star-label={star.topicId}
+		>
+			{star.label.text}
+		</text>
+	);
 }
 
 function formatHours(hours: number): string {
@@ -149,7 +152,8 @@ export function StarMap({ roadmap, selectedTopicId, onSelectTopic, onOpenStage }
 	const blurId = `lm-blur-${uid}`;
 	const dense = layout.edges.length > 200;
 	const hueOf = useMemo(() => new Map(layout.stars.map((s) => [s.topicId, s.hue])), [layout]);
-	const stageById = useMemo(() => new Map(layout.stages.map((st) => [st.id, st])), [layout]);
+	const statusOf = (topicId: string): TopicStatus => statuses.get(topicId) ?? "ready";
+	const focusStar = focusId === null ? undefined : layout.stars.find((s) => s.topicId === focusId);
 
 	const onStarKey = (event: KeyboardEvent, topicId: string) => {
 		if (event.key === "Enter" || event.key === " ") {
@@ -313,17 +317,15 @@ export function StarMap({ roadmap, selectedTopicId, onSelectTopic, onOpenStage }
 				</g>
 
 				{layout.stages.map((st) => (
-					<StageMarks key={st.id} stage={st} boxWidth={width} onOpenStage={onOpenStage} onKey={onStageKey} />
+					<StageMarks key={st.id} stage={st} onOpenStage={onOpenStage} onKey={onStageKey} />
 				))}
 
 				{layout.stars.map((star) => {
-					const status: TopicStatus = statuses.get(star.topicId) ?? "ready";
+					const status = statusOf(star.topicId);
 					const title = titles.get(star.topicId) ?? star.topicId;
 					const label = `${title} — ${STAR_STATUS_LABEL[status]}`;
 					const selected = selectedTopicId === star.topicId;
 					const s = star.size;
-					const showLabel = showStarLabels || selected || hovered === star.topicId;
-					const labelAt = starLabelSpot(star, stageById.get(star.stageId), layout.unit);
 					return (
 						<g
 							key={star.topicId}
@@ -360,25 +362,20 @@ export function StarMap({ roadmap, selectedTopicId, onSelectTopic, onOpenStage }
 								className="opacity-0 transition-opacity group-hover:opacity-60 group-focus-visible:opacity-100"
 							/>
 							<StarGlyph status={status} size={s} hue={star.hue} glowId={glowId} />
-							{showLabel && (
-								<text
-									x={labelAt.x}
-									y={labelAt.y}
-									textAnchor={labelAt.anchor}
-									fontSize={11}
-									fill={status === "locked" || status === "skipped" ? "#9a98a6" : "#e4e2ec"}
-									stroke="#0b0b0f"
-									strokeWidth={3}
-									strokeOpacity={0.85}
-									paintOrder="stroke"
-									className="pointer-events-none"
-								>
-									{title.length > STAR_LABEL_MAX_CHARS ? `${title.slice(0, STAR_LABEL_MAX_CHARS - 1).trimEnd()}…` : title}
-								</text>
-							)}
 						</g>
 					);
 				})}
+				{/* titles last, so no star paints over them; the hovered or
+				    selected star's title is always shown, on top */}
+				<g>
+					{showStarLabels &&
+						layout.stars.map((star) =>
+							star.label.hidden || star.topicId === focusId ? null : (
+								<StarTitle key={star.topicId} star={star} dim={["locked", "skipped"].includes(statusOf(star.topicId))} />
+							),
+						)}
+					{focusStar && <StarTitle star={focusStar} dim={false} />}
+				</g>
 			</svg>
 
 			<div className="px-2 pb-2">
@@ -390,22 +387,15 @@ export function StarMap({ roadmap, selectedTopicId, onSelectTopic, onOpenStage }
 
 interface StageMarksProps {
 	stage: StageSpot;
-	/** The load button is kept inside the box even for edge clusters. */
-	boxWidth: number;
 	onOpenStage: (stageId: string) => void;
 	onKey: (event: KeyboardEvent, stageId: string) => void;
 }
 
 /** A cluster's number badge, its label, and — while it has no topics — its
  *  outline and load action. */
-function StageMarks({ stage: st, boxWidth, onOpenStage, onKey }: StageMarksProps) {
-	const badgeX = st.x - st.radius * 0.72;
-	const badgeY = st.y - st.radius * 0.72;
+function StageMarks({ stage: st, onOpenStage, onKey }: StageMarksProps) {
+	const { badgeX, badgeY, action } = st;
 	const progress = st.pending ? `${formatHours(st.hours)} · not loaded yet` : `${st.done} of ${st.total} done · ${formatHours(st.hours)}`;
-	const canLoad = st.pending && st.fill !== "filling";
-	const buttonText = st.fill === "error" ? "Try loading again" : "Load this stage";
-	const buttonW = buttonText.length * 6.6 + 24;
-	const buttonX = Math.min(Math.max(st.x, buttonW / 2 + 8), boxWidth - buttonW / 2 - 8);
 	return (
 		<g>
 			{st.pending && (
@@ -472,16 +462,16 @@ function StageMarks({ stage: st, boxWidth, onOpenStage, onKey }: StageMarksProps
 			>
 				{progress}
 			</text>
-			{st.pending && st.fill === "filling" && (
-				<text x={st.x} y={st.y + 4} textAnchor="middle" fontSize={12} fill="#c9c7d4">
-					Loading topics…
+			{action && !action.button && (
+				<text x={action.x} y={action.y + 4} textAnchor="middle" fontSize={12} fill="#c9c7d4">
+					{action.text}
 				</text>
 			)}
-			{canLoad && (
+			{action?.button && (
 				<g
 					role="button"
 					tabIndex={0}
-					aria-label={`${buttonText}: stage ${st.number}, ${st.title}`}
+					aria-label={`${action.text}: stage ${st.number}, ${st.title}`}
 					data-load-stage={st.id}
 					className="group cursor-pointer"
 					onClick={() => onOpenStage(st.id)}
@@ -489,11 +479,11 @@ function StageMarks({ stage: st, boxWidth, onOpenStage, onKey }: StageMarksProps
 				>
 					<title>{`Find the topics and resources for stage ${st.number}`}</title>
 					<rect
-						x={buttonX - buttonW / 2}
-						y={st.y - 12}
-						width={buttonW}
-						height={24}
-						rx={12}
+						x={action.x - action.width / 2}
+						y={action.y - action.height / 2}
+						width={action.width}
+						height={action.height}
+						rx={action.height / 2}
 						fill={`hsl(${st.hue} 25% 12%)`}
 						fillOpacity={0.92}
 						stroke={`hsl(${st.hue} 55% 62%)`}
@@ -502,18 +492,18 @@ function StageMarks({ stage: st, boxWidth, onOpenStage, onKey }: StageMarksProps
 						className="transition-colors group-hover:fill-[#2a2a2a]"
 					/>
 					<rect
-						x={buttonX - buttonW / 2 - 3}
-						y={st.y - 15}
-						width={buttonW + 6}
-						height={30}
-						rx={15}
+						x={action.x - action.width / 2 - 3}
+						y={action.y - action.height / 2 - 3}
+						width={action.width + 6}
+						height={action.height + 6}
+						rx={action.height / 2 + 3}
 						fill="none"
 						stroke="var(--ring)"
 						strokeWidth={1.5}
 						className="opacity-0 group-focus-visible:opacity-100"
 					/>
-					<text x={buttonX} y={st.y + 4} textAnchor="middle" fontSize={12} fontWeight={600} fill={`hsl(${st.hue} 45% 88%)`}>
-						{buttonText}
+					<text x={action.x} y={action.y + 4} textAnchor="middle" fontSize={12} fontWeight={600} fill={`hsl(${st.hue} 45% 88%)`}>
+						{action.text}
 					</text>
 				</g>
 			)}

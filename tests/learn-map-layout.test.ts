@@ -9,7 +9,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { DepthId, Roadmap, Stage, Topic, TopicState, Track } from "@/src/core/learn/contracts.ts";
-import { layoutStarMap, type StarMapLayout } from "@/src/core/learn/map-layout.ts";
+import {
+	layoutStarMap,
+	type Rect,
+	type StarMapLayout,
+	stageLabelBox,
+	starLabelBox,
+} from "@/src/core/learn/map-layout.ts";
 
 function topic(id: string, prereqs: string[] = [], state: TopicState = "todo", minutes = 30): Topic {
 	return { id, title: `Topic ${id}`, objective: "Learn the thing.", minutes, prereqs, state };
@@ -304,5 +310,91 @@ describe("layoutStarMap", () => {
 		assert.deepEqual(layout.stages, []);
 		assert.deepEqual(layout.stars, []);
 		assert.deepEqual(layout.edges, []);
+	});
+
+	describe("star labels", () => {
+		/** Three stages of long, look-alike titles (the docs/screens/06-map.png case). */
+		function wordy(): Roadmap {
+			const words = ["What it is", "Key words", "A first example", "Common mistakes"];
+			const stages = ["First steps in music theory", "Core ideas in music theory", "Working with it in music theory"];
+			return roadmap(
+				stages.map((title, i) =>
+					stage(
+						`w${i}`,
+						words.slice(0, i === 1 ? 2 : 3).map((w, j) => ({
+							...topic(`w${i}t${j}`, j > 0 ? [`w${i}t${j - 1}`] : [], i === 0 && j < 2 ? "done" : "todo"),
+							title: `${w}: music theory`,
+						})),
+						{ title },
+					),
+				),
+			);
+		}
+		const overlaps = (a: Rect, b: Rect) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+
+		function assertLabelsClear(layout: StarMapLayout, box: { width: number; height: number }): void {
+			const visible = layout.stars.filter((s) => !s.label.hidden);
+			const boxes = visible.map((s) => ({ id: s.topicId, r: starLabelBox(s.label) }));
+			for (let i = 0; i < boxes.length; i++) {
+				const a = boxes[i]!;
+				assert.ok(a.r.x0 >= 0 && a.r.x1 <= box.width && a.r.y0 >= 0 && a.r.y1 <= box.height, `${a.id} label outside the box`);
+				for (let j = i + 1; j < boxes.length; j++) {
+					assert.ok(!overlaps(a.r, boxes[j]!.r), `labels of ${a.id} and ${boxes[j]!.id} overlap`);
+				}
+				for (const st of layout.stages) {
+					assert.ok(!overlaps(a.r, stageLabelBox(st)), `label of ${a.id} overlaps stage label ${st.id}`);
+				}
+				for (const star of layout.stars) {
+					const core = { x0: star.x - star.size, y0: star.y - star.size, x1: star.x + star.size, y1: star.y + star.size };
+					assert.ok(!overlaps(a.r, core), `label of ${a.id} covers star ${star.topicId}`);
+				}
+			}
+		}
+
+		it("gives every star a label with its title, shortened past 22 characters", () => {
+			const rm = wordy();
+			const titles = new Map(rm.stages.flatMap((s) => s.topics.map((t) => [t.id, t.title] as const)));
+			for (const star of layoutStarMap(rm, BOX).stars) {
+				const title = titles.get(star.topicId)!;
+				const text = star.label.text;
+				assert.ok(text === title || (text.endsWith("…") && title.startsWith(text.slice(0, -1)) && text.length <= 22), `${title} → ${text}`);
+				assert.ok(["start", "middle", "end"].includes(star.label.anchor));
+			}
+		});
+
+		it("keeps visible labels apart in a 3-stage map", () => {
+			for (const box of [BOX, { width: 760, height: 500 }, { width: 380, height: 456 }]) {
+				const layout = layoutStarMap(wordy(), box);
+				assertLabelsClear(layout, box);
+				if (box === BOX) {
+					const shown = layout.stars.filter((s) => !s.label.hidden).length;
+					assert.ok(shown >= layout.stars.length - 2, `only ${shown} of ${layout.stars.length} labels shown`);
+				}
+			}
+			assertLabelsClear(layoutStarMap(grid(3, 3), BOX), BOX);
+		});
+
+		it("keeps visible labels apart in a 16-stage map, hiding what cannot fit", () => {
+			const rm = grid(16, 9, { tracks: 4, depth: "ultra" });
+			for (const box of [BOX, { width: 1600, height: 1360 }]) {
+				const layout = layoutStarMap(rm, box);
+				assertLabelsClear(layout, box);
+			}
+			const big = layoutStarMap(rm, { width: 1600, height: 1360 });
+			assert.ok(big.stars.some((s) => s.label.hidden === false), "a roomy box shows some labels");
+		});
+
+		it("moves a crowded label to another side before hiding it", () => {
+			// one stage of twelve: labels cannot all sit under their stars
+			const rm = grid(1, 12);
+			const layout = layoutStarMap(rm, BOX);
+			assertLabelsClear(layout, BOX);
+			const sides = new Set(
+				layout.stars
+					.filter((s) => !s.label.hidden)
+					.map((s) => (s.label.anchor !== "middle" ? s.label.anchor : s.label.y > s.y ? "below" : "above")),
+			);
+			assert.ok(sides.size >= 2, `labels all on one side: ${[...sides].join(",")}`);
+		});
 	});
 });

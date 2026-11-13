@@ -153,6 +153,16 @@ describe("StarMap", () => {
 		assert.match(html, /aria-expanded="true"/);
 	});
 
+	it("draws star titles above every star, at most once each, the selected one always", () => {
+		const html = render("t4");
+		const labels = [...html.matchAll(/data-star-label="([^"]+)"/g)].map((m) => m[1]);
+		assert.equal(new Set(labels).size, labels.length, "no title drawn twice");
+		assert.ok(labels.includes("t4"), "the selected star's title is shown");
+		const lastStar = html.lastIndexOf("data-topic-id=");
+		assert.ok(html.indexOf("data-star-label=") > lastStar, "titles paint after (over) the stars");
+		assert.match(html, /data-star-label="t4"[^>]*>Running bowline</);
+	});
+
 	it("has visible zoom controls", () => {
 		const html = render();
 		assert.match(html, /aria-label="Zoom in"/);

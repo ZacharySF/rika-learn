@@ -47,6 +47,41 @@ export interface StageSpot {
 	/** No topics loaded yet: drawn as an outline with a "load" action. */
 	pending: boolean;
 	fill: Stage["fill"];
+	/** The stage-number badge, on the cluster's upper-left edge. */
+	badgeX: number;
+	badgeY: number;
+	/** What a stage without topics shows at its centre: a load button, or
+	 *  "Loading topics…" while it fills. null once it has topics. */
+	action: StageAction | null;
+}
+
+export interface StageAction {
+	text: string;
+	/** false = plain status text ("Loading topics…"), not a button. */
+	button: boolean;
+	/** Centre of the button. */
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+
+/** Axis-aligned box in map pixels. */
+export interface Rect {
+	x0: number;
+	y0: number;
+	x1: number;
+	y1: number;
+}
+
+/** Where a star's title sits. `x`, `y` are the text anchor and baseline. */
+export interface StarLabel {
+	text: string;
+	x: number;
+	y: number;
+	anchor: "start" | "middle" | "end";
+	/** No free spot: drawn only on hover, focus or selection. */
+	hidden: boolean;
 }
 
 export interface StarSpot {
@@ -57,6 +92,7 @@ export interface StarSpot {
 	/** Core radius; two stars are never closer than the sum of their sizes. */
 	size: number;
 	hue: number;
+	label: StarLabel;
 }
 
 export interface EdgePath {
@@ -118,6 +154,35 @@ export const STAGE_LABEL_MAX_CHARS = 28;
 
 export function stageLabelText(title: string): string {
 	return title.length <= STAGE_LABEL_MAX_CHARS ? title : `${title.slice(0, STAGE_LABEL_MAX_CHARS - 1).trimEnd()}…`;
+}
+
+/** Star titles longer than this are cut with an ellipsis on the map. */
+export const STAR_LABEL_MAX_CHARS = 22;
+/** Star titles are drawn at this size; boxes below are estimated from it. */
+export const STAR_LABEL_FONT_PX = 11;
+/** Glyph width estimate at 11px (the app's mono face runs 0.6em). */
+const STAR_LABEL_CHAR_PX = 6.6;
+/** Load-button glyph width estimate at its 12px. */
+const ACTION_CHAR_PX = 6.6;
+
+export function starLabelText(title: string): string {
+	return title.length <= STAR_LABEL_MAX_CHARS ? title : `${title.slice(0, STAR_LABEL_MAX_CHARS - 1).trimEnd()}…`;
+}
+
+/** The box a star label covers (with a hair of breathing room). */
+export function starLabelBox(label: Pick<StarLabel, "text" | "x" | "y" | "anchor">): Rect {
+	const w = label.text.length * STAR_LABEL_CHAR_PX;
+	const x0 = label.anchor === "start" ? label.x : label.anchor === "end" ? label.x - w : label.x - w / 2;
+	return { x0: x0 - 2, y0: label.y - 10, x1: x0 + w + 2, y1: label.y + 4 };
+}
+
+/** The box a stage label covers: its title line and the progress line. */
+export function stageLabelBox(stage: StageSpot): Rect {
+	return labelRect(stage, stage.labelY);
+}
+
+function overlaps(a: Rect, b: Rect): boolean {
+	return a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 }
 
 /** Hues far enough apart that neighbouring stages or tracks never blur
@@ -253,7 +318,7 @@ function spiralCentres(radii: number[], stretch: number, phase: number): { x: nu
 }
 
 /** A stage label's box: the title line and the progress line under it. */
-function labelRect(st: StageSpot, labelY: number): { x0: number; y0: number; x1: number; y1: number } {
+function labelRect(st: StageSpot, labelY: number): Rect {
 	const half = Math.max(Math.min(st.title.length, STAGE_LABEL_MAX_CHARS) * LABEL_CHAR_PX, 130) / 2;
 	return { x0: st.labelX - half, y0: labelY - 11, x1: st.labelX + half, y1: labelY + LABEL_BLOCK_PX - 14 };
 }
@@ -262,7 +327,7 @@ function labelRect(st: StageSpot, labelY: number): { x0: number; y0: number; x1:
  *  label or another cluster and the spot above is clearer. In stage order,
  *  so early stages (the ones you read first) keep the default spot. */
 function placeLabels(stages: StageSpot[], height: number): void {
-	const placed: { x0: number; y0: number; x1: number; y1: number }[] = [];
+	const placed: Rect[] = [];
 	for (const st of stages) {
 		const under = st.labelY;
 		const above = r2(st.y - st.radius - LABEL_BLOCK_PX + 6);
@@ -270,7 +335,7 @@ function placeLabels(stages: StageSpot[], height: number): void {
 			const r = labelRect(st, labelY);
 			if (r.y0 < PAD_PX || r.y1 > height) return Number.POSITIVE_INFINITY;
 			let c = 0;
-			for (const p of placed) if (r.x0 < p.x1 && p.x0 < r.x1 && r.y0 < p.y1 && p.y0 < r.y1) c += 2;
+			for (const p of placed) if (overlaps(r, p)) c += 2;
 			for (const other of stages) {
 				if (other === st) continue;
 				// nearest point of the rect to the other cluster's centre
@@ -283,6 +348,53 @@ function placeLabels(stages: StageSpot[], height: number): void {
 		const costUnder = cost(under);
 		if (costUnder > 0 && cost(above) < costUnder) st.labelY = above;
 		placed.push(labelRect(st, st.labelY));
+	}
+}
+
+/** Everything a star label must not cover: stage labels, badges (and the
+ *  "Start here" note on stage 1), stage actions, and every star's ring. */
+function labelObstacles(stages: StageSpot[], stars: StarSpot[]): Rect[] {
+	const out: Rect[] = stages.map(stageLabelBox);
+	for (const st of stages) {
+		out.push({ x0: st.badgeX - 11, y0: st.badgeY - 11, x1: st.badgeX + 11, y1: st.badgeY + 11 });
+		if (st.number === 1) {
+			const half = ("Start here".length * STAR_LABEL_CHAR_PX) / 2;
+			out.push({ x0: st.badgeX - half, y0: st.badgeY - 27, x1: st.badgeX + half, y1: st.badgeY - 12 });
+		}
+		const a = st.action;
+		if (a) out.push({ x0: a.x - a.width / 2 - 3, y0: a.y - a.height / 2 - 3, x1: a.x + a.width / 2 + 3, y1: a.y + a.height / 2 + 3 });
+	}
+	for (const s of stars) {
+		const r = Math.max(s.size * 2, 3);
+		out.push({ x0: s.x - r, y0: s.y - r, x1: s.x + r, y1: s.y + r });
+	}
+	return out;
+}
+
+/** Star labels try below, above, right, then left of their star and take
+ *  the first spot that is inside the box and clear of every obstacle and
+ *  every label placed before. In roadmap order, so early topics win. No
+ *  free spot: the label keeps the spot below and is marked hidden. */
+function placeStarLabels(stars: StarSpot[], stages: StageSpot[], box: StarMapBox): void {
+	const blocked = labelObstacles(stages, stars);
+	for (const s of stars) {
+		const text = s.label.text;
+		const v = s.size * 3.4;
+		const h = s.size * 2.6 + 5;
+		const candidates: StarLabel[] = [
+			{ text, x: s.x, y: r2(s.y + v + 11), anchor: "middle", hidden: false },
+			{ text, x: s.x, y: r2(s.y - v - 5), anchor: "middle", hidden: false },
+			{ text, x: r2(s.x + h), y: r2(s.y + 4), anchor: "start", hidden: false },
+			{ text, x: r2(s.x - h), y: r2(s.y + 4), anchor: "end", hidden: false },
+		];
+		const free = candidates.find((c) => {
+			const r = starLabelBox(c);
+			if (r.x0 < 0 || r.y0 < 0 || r.x1 > box.width || r.y1 > box.height) return false;
+			// the star's own ring sits in `blocked` too; the candidates are offset clear of it
+			return blocked.every((b) => !overlaps(r, b));
+		});
+		s.label = free ?? { ...candidates[0]!, hidden: true };
+		if (free) blocked.push(starLabelBox(free));
 	}
 }
 
@@ -353,11 +465,12 @@ export function layoutStarMap(roadmap: Pick<Roadmap, "id" | "depth" | "stages" |
 	// cluster gets its own seeded twist so the sunflowers do not all match.
 	const local = roadmap.stages.map((stage) => {
 		const twist = seededRandom(hashString(`${roadmap.id}:${stage.id}`))() * Math.PI * 2;
-		const minutes = new Map(stage.topics.map((t) => [t.id, t.minutes]));
+		const byId = new Map(stage.topics.map((t) => [t.id, t]));
 		return orderTopics(stage).map((id, k) => {
 			const r = SUNFLOWER * Math.sqrt(k + 0.5);
 			const a = twist + k * GOLDEN_ANGLE;
-			return { id, dx: r * Math.cos(a), dy: r * Math.sin(a), size: starUnits(minutes.get(id) ?? 30) };
+			const topic = byId.get(id);
+			return { id, title: topic?.title ?? id, dx: r * Math.cos(a), dy: r * Math.sin(a), size: starUnits(topic?.minutes ?? 30) };
 		});
 	});
 
@@ -398,6 +511,14 @@ export function layoutStarMap(roadmap: Pick<Roadmap, "id" | "depth" | "stages" |
 		const labelX = lo <= hi ? Math.min(Math.max(x, lo), hi) : width / 2;
 		let done = 0;
 		for (const t of stage.topics) if (t.state === "done" || t.state === "skipped") done++;
+		const pending = stage.topics.length === 0;
+		let action: StageAction | null = null;
+		if (pending) {
+			const button = stage.fill !== "filling";
+			const text = !button ? "Loading topics…" : stage.fill === "error" ? "Try loading again" : "Load this stage";
+			const w = text.length * ACTION_CHAR_PX + 24;
+			action = { text, button, x: r2(Math.min(Math.max(x, w / 2 + 8), width - w / 2 - 8)), y, width: r2(w), height: 24 };
+		}
 		return {
 			id: stage.id,
 			number: i + 1,
@@ -411,8 +532,11 @@ export function layoutStarMap(roadmap: Pick<Roadmap, "id" | "depth" | "stages" |
 			done,
 			total: stage.topics.length,
 			hours: stage.hours,
-			pending: stage.topics.length === 0,
+			pending,
 			fill: stage.fill,
+			badgeX: r2(x - radius * 0.72),
+			badgeY: r2(y - radius * 0.72),
+			action,
 		};
 	});
 	placeLabels(stages, height);
@@ -427,9 +551,11 @@ export function layoutStarMap(roadmap: Pick<Roadmap, "id" | "depth" | "stages" |
 				y: r2(st.y + unit * spot.dy),
 				size: r2(Math.min(unit * spot.size, STAR_MAX_PX)),
 				hue: st.hue,
+				label: { text: starLabelText(spot.title), x: 0, y: 0, anchor: "middle", hidden: true },
 			});
 		}
 	});
+	placeStarLabels(stars, stages, box);
 
 	const at = new Map(stars.map((s) => [s.topicId, s]));
 	const edges: EdgePath[] = [];
