@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { MenuShell } from "@/components/menu-shell";
 import { DeleteSessionDialog } from "@/components/delete-session-dialog";
 import type { ChatDeleteMode } from "@/src/core";
-import { DumbbellIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
+import { DumbbellIcon, GraduationCapIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
 import { ActivitySection } from "@/components/activity-dock";
 import { CoverageMenuBlock } from "@/components/extraction-coverage";
 import { LhMark } from "@/components/lh-mark";
@@ -689,11 +689,23 @@ function SessionsSidebar() {
 					</Hint>
 				</div>
 
-				{/* Two doors, STACKED (owner round 8, 2026-10-05 — was a
+				{/* The doors, STACKED (owner round 8, 2026-10-05 — was a
 				    half/half row): full-width rows read cleaner and give the
-				    labels room; teaching keeps the original draft route,
-				    practice carries its mode. */}
+				    labels room; Learn (rika-learn) opens the roadmap entry,
+				    teaching keeps the original draft route, practice carries
+				    its mode. */}
 				<div className="mx-3 mb-2 flex flex-col gap-1.5">
+					<button
+						type="button"
+						data-testid="open-learn"
+						onClick={() => router.push("/learn")}
+						aria-current={pathname?.startsWith("/learn") ? "page" : undefined}
+						className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs uppercase tracking-wider text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+					>
+						<GraduationCapIcon className="size-3" />
+						Learn
+						<span className="sr-only">build a learning roadmap</span>
+					</button>
 					<button
 						type="button"
 						data-testid="new-session"

@@ -43,6 +43,7 @@ import { useAppearance } from "./appearance.tsx";
 import { SettingsSection } from "./controls.tsx";
 import { UpdateSettings } from "./update-settings.tsx";
 import { AgentSection } from "./agent-section.tsx";
+import { LearnSection } from "./learn-section.tsx";
 import type { ModelsSettings } from "@/src/core";
 import { MENU_CLOSE_EVENT, MENU_OPEN_EVENT } from "@/components/menu-shell";
 import { notifySettingsSaved } from "@/components/settings-signal";
@@ -59,6 +60,7 @@ import { NativeSubscriptionUIProvider } from "./subscription-connections.tsx";
 const SECTIONS = [
 	{ id: "keys", label: "Providers" },
 	{ id: "agent", label: "Agent" },
+	{ id: "learn", label: "Learn" },
 	{ id: "appearance", label: "Appearance" },
 	{ id: "graph", label: "Graph" },
 	{ id: "keyboard", label: "Keyboard", hint: "Stored on this device" },
@@ -143,6 +145,7 @@ export function SettingsDialogBody({
 	initialRow?: string | null;
 }) {
 	const { onAppearanceChange } = useAppearance();
+	const { open: openSection } = useSettingsDialog();
 	const [record, setRecord] = useState<UserSettings | null | undefined>(
 		undefined,
 	);
@@ -428,6 +431,15 @@ export function SettingsDialogBody({
 									testid="section-keyboard"
 								>
 									<KeyboardSection />
+								</SettingsSection>
+							)}
+							{active === "learn" && (
+								<SettingsSection
+									title="Learn"
+									hint="Roadmap sources and spending. Learn pays for model calls with your own provider key."
+									testid="section-learn"
+								>
+									<LearnSection open={openSection} />
 								</SettingsSection>
 							)}
 						</div>
