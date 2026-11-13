@@ -30,7 +30,7 @@ It runs on its own like LearnHarness does, and it is also published as the `rika
 
 Sources are toggles in **Settings → Learn**: Wikipedia, MIT Learn/OCW, freeCodeCamp, Open Library, official docs (robots.txt respected), YouTube (your own Data API key: one search per stage, a quota meter, no scraping, results expire after 30 days), arXiv, Semantic Scholar, Hacker News and GitHub awesome-lists, plus Brave Search if you add a key.
 
-Model calls use your own provider keys through the LearnHarness provider layer. Learn uses one fast, cheap model by default (your **cheap** model slot; you can change it under Settings → Agent → Roadmap). Calls run automatically while you are under the daily spending limit you set on first use; anything over it shows a review sheet first.
+Model calls use your own provider keys through the LearnHarness provider layer. Learn uses one fast, cheap model by default: your **cheap** model slot. To use another model, pick one in **Settings → Learn**. Calls run automatically while you are under the daily spending limit you set on first use; anything over it shows a review sheet first.
 
 How it works, the rika bridge and the module format: [docs/learn.md](docs/learn.md). Design notes: [docs/01-learn-design.md](docs/01-learn-design.md) and [research/07-learn-feature.md](research/07-learn-feature.md).
 

@@ -33,9 +33,11 @@ Modifications (2026-11-13 onwards)
   Calendar payloads to rika (docs/learn.md).
 - Added a daily spending limit for roadmap model calls, with a review
   sheet when a build would go over it.
-- Added the "roadmap" background model role (defaults to the cheap
-  model slot) to the existing provider layer, a YouTube key entry to the
-  key list, a "Learn" settings section and a "Learn" entry in the sidebar.
+- Learn calls the model through the existing provider layer with one
+  fast, cheap default (the cheap model slot), changeable in Settings →
+  Learn. runSubagent gained a streamed-text hook for this. Also added a
+  YouTube key entry to the key list, a "Learn" settings section and a
+  "Learn" entry in the sidebar.
 - Added rika module packaging: rika-module.json, scripts/package-module
   and .github/workflows/module-release.yml.
 - The upstream desktop release workflow (.github/workflows/release.yml)
