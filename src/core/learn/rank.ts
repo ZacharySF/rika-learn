@@ -231,19 +231,30 @@ function score(c: Candidate, ctx: RankContext, terms: Set<string>): { score: num
 		if (!c.canon && !known && views !== undefined && views < 1000 && !(ageDays < 183)) return null;
 		const [lo, hi] = VIDEO_MINUTES[ctx.depth];
 		const minutes = c.minutes;
+		if (known) parts.push("Known teaching channel");
 		if (minutes !== undefined) {
 			if (minutes < 3) return null;
-			if (minutes >= lo && minutes <= hi) total += 0.5;
-			else if (minutes < lo) total -= 0.3;
-			else if (minutes > hi * 2.5 && !(ctx.depth === "ultra" || ctx.depth === "ultraviolet")) total -= 0.6;
-			else total -= 0.2;
+			if (minutes >= lo && minutes <= hi) {
+				total += 0.5;
+				parts.push("Right length");
+			} else if (minutes < lo) {
+				total -= 0.3;
+				parts.push("Quick overview");
+			} else if (minutes > hi * 2.5 && !(ctx.depth === "ultra" || ctx.depth === "ultraviolet")) {
+				total -= 0.6;
+				parts.push("Long lecture");
+			} else {
+				total -= 0.2;
+				parts.push("Long lecture");
+			}
 		}
-		if (c.signals?.captions) total += 0.1;
+		if (c.signals?.captions) {
+			total += 0.1;
+			parts.push("Has captions");
+		}
 		if (known) total += 0.3;
-		parts.push(c.by ? `Video by ${c.by}` : "Video", minutes !== undefined ? `${Math.round(minutes)} min` : "");
 	} else {
 		parts.push(SOURCE_PHRASE[c.source]);
-		if (c.minutes !== undefined && c.kind !== "book") parts.push(`${Math.round(c.minutes)} min`);
 	}
 
 	if (ctx.volatility === "fast") {
@@ -255,9 +266,16 @@ function score(c: Candidate, ctx: RankContext, terms: Set<string>): { score: num
 	total += Math.min(0.4, log10p(c.signals?.citations) * 0.1) + Math.min(0.2, log10p(c.signals?.influential) * 0.08);
 	total += Math.min(0.3, log10p(c.signals?.editions) * 0.1) + Math.min(0.3, log10p(c.signals?.stars) * 0.06);
 	total += Math.min(0.2, log10p(c.signals?.points) * 0.05);
-	if ((c.signals?.citations ?? 0) >= 1000) parts.push("highly cited");
+	if ((c.signals?.citations ?? 0) >= 1000) parts.push("Highly cited");
 
-	const reason = parts.filter(Boolean).join(" · ").split(/\s+/).slice(0, 12).join(" ");
+	// Whole phrases only, at most 12 words; the channel and minutes are
+	// already on the resource's own line, so the reason never repeats them.
+	let reason = "";
+	for (const part of parts.filter(Boolean)) {
+		const next = reason ? `${reason} · ${part}` : part;
+		if (next.split(/\s+/).length > 12) break;
+		reason = next;
+	}
 	return { score: Math.round(total * 1000) / 1000, reason };
 }
 

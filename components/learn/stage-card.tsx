@@ -65,8 +65,33 @@ export function topicStatusText(status: TopicStatus): string {
 
 const LINK = { target: "_blank", rel: "noopener noreferrer" } as const;
 
+/** Whether the source label already says who made it: "Wikipedia" by
+ *  "Wikipedia", or "MIT Learn / OpenCourseWare" by "MIT OpenCourseWare"
+ *  (a part of the label inside the author, or the author inside the label). */
+function labelNames(label: string, by: string): boolean {
+	const author = by.trim().toLowerCase();
+	if (!author) return true;
+	const whole = label.toLowerCase();
+	if (whole.includes(author)) return true;
+	return whole.split("/").some((part) => {
+		const p = part.trim();
+		return p.length > 0 && author.includes(p);
+	});
+}
+
+/** "Source · author · minutes", each said once, and the reason unless it
+ *  only repeats the source. */
+export function resourceLines(resource: Resource): { meta: string; reason: string | null } {
+	const label = sourceLabel(resource.source);
+	const parts = [label];
+	if (resource.by && !labelNames(label, resource.by)) parts.push(resource.by);
+	if (resource.minutes) parts.push(`${resource.minutes} min`);
+	const reason = resource.reason.trim();
+	return { meta: parts.join(" · "), reason: reason && reason.toLowerCase() !== label.toLowerCase() ? reason : null };
+}
+
 function ResourceItem({ resource }: { resource: Resource }) {
-	const meta = [resource.by, resource.kind === "video" ? null : sourceLabel(resource.source), resource.minutes ? `${resource.minutes} min` : null].filter(Boolean);
+	const { meta, reason } = resourceLines(resource);
 	if (resource.kind === "video") {
 		return (
 			<li className="flex gap-3">
@@ -85,8 +110,8 @@ function ResourceItem({ resource }: { resource: Resource }) {
 					<a href={resource.url} {...LINK} className="block font-prose text-base leading-snug text-foreground underline-offset-2 hover:underline">
 						{resource.title}
 					</a>
-					{meta.length > 0 && <p className="text-xs text-muted-foreground">{meta.join(" · ")}</p>}
-					<p className="mt-0.5 text-xs text-muted-foreground/80">{resource.reason}</p>
+					<p className="text-xs text-muted-foreground">{meta}</p>
+					{reason && <p className="mt-0.5 text-xs text-muted-foreground/80">{reason}</p>}
 				</div>
 			</li>
 		);
@@ -98,8 +123,8 @@ function ResourceItem({ resource }: { resource: Resource }) {
 				<span className="min-w-0">{resource.title}</span>
 				<ExternalLinkIcon aria-hidden className="mt-1 size-3 shrink-0 text-muted-foreground" />
 			</a>
-			{meta.length > 0 && <p className="text-xs text-muted-foreground">{meta.join(" · ")}</p>}
-			<p className="mt-0.5 text-xs text-muted-foreground/80">{resource.reason}</p>
+			<p className="text-xs text-muted-foreground">{meta}</p>
+			{reason && <p className="mt-0.5 text-xs text-muted-foreground/80">{reason}</p>}
 		</li>
 	);
 }

@@ -143,7 +143,11 @@ describe("rankStage", () => {
 			assert.ok(r.reason.length > 0);
 			assert.ok(r.reason.split(/\s+/).length <= 12, r.reason);
 		}
-		assert.match(rankStage(pool, ctx).picks[0]!.reason, /10 min/);
+		const video = rankStage(pool, ctx).picks[0]!;
+		assert.match(video.reason, /Right length/, "says why the length fits");
+		assert.match(video.reason, /Has captions/);
+		assert.match(video.reason, /Known teaching channel/);
+		assert.doesNotMatch(video.reason, /3Blue1Brown|10 min/, "channel and minutes are already on the meta line");
 	});
 
 	it("prefers recent resources for fast-moving topics", () => {

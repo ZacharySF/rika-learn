@@ -10,7 +10,7 @@ import React from "react";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { StageCard, TopicProgress } from "../components/learn/stage-card.tsx";
+import { ResourceList, StageCard, TopicProgress } from "../components/learn/stage-card.tsx";
 import { RoadmapHeader, TopicDetails, ViewToggle } from "../components/learn/roadmap-parts.tsx";
 import { CalendarForm } from "../components/learn/stage-actions.tsx";
 import { indexRoadmap } from "../components/learn/roadmap-index.ts";
@@ -242,5 +242,42 @@ describe("CalendarForm", () => {
 		assert.ok(html.includes('value="2026-11-14"'));
 		assert.ok(html.includes('value="18:00"'));
 		assert.ok(html.includes('value="60"'));
+	});
+});
+
+describe("resource lines say each thing once", () => {
+	const html = renderToStaticMarkup(
+		<ResourceList
+			resources={{
+				picks: [
+					resource({ id: "y", kind: "video", source: "youtube", title: "Video pick", url: "https://example.test/y", by: "Synthetic Channel", minutes: 17, reason: "Recommended for this stage · Has captions" }),
+					resource({ id: "w", source: "wikipedia", title: "Article pick", url: "https://example.test/w", by: "Wikipedia", minutes: 11, reason: "Wikipedia overview" }),
+				],
+				more: [
+					resource({ id: "m", kind: "course", source: "mitlearn", title: "Course pick", url: "https://example.test/m", by: "MIT OpenCourseWare", minutes: 40, reason: "University course" }),
+					resource({ id: "h", kind: "discussion", source: "hackernews", title: "Thread pick", url: "https://example.test/h", by: "synthetic-user", reason: "hacker news" }),
+				],
+			}}
+		/>,
+	);
+	const occurrences = (needle: string) => html.split(needle).length - 1;
+
+	it("shows the source label once, then a different author, then minutes", () => {
+		assert.ok(!html.includes("Wikipedia · Wikipedia"));
+		assert.ok(html.includes(">Wikipedia · 11 min<"));
+		assert.ok(html.includes(">YouTube · Synthetic Channel · 17 min<"));
+		assert.ok(html.includes(">Hacker News · synthetic-user<"));
+	});
+
+	it("drops an author the source label already names", () => {
+		assert.ok(html.includes(">MIT Learn / OpenCourseWare · 40 min<"));
+		assert.ok(!html.includes("MIT OpenCourseWare"));
+	});
+
+	it("shows the reason once, and not at all when it only repeats the source", () => {
+		assert.equal(occurrences("Wikipedia overview"), 1);
+		assert.equal(occurrences("Recommended for this stage · Has captions"), 1);
+		assert.equal(occurrences("University course"), 1);
+		assert.equal(occurrences(">hacker news<"), 0);
 	});
 });
