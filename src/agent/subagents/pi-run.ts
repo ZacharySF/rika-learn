@@ -40,6 +40,9 @@ export interface SubagentRunOptions {
 	onAssistantMessage?: (message: AssistantMessage, step: number) => void;
 	/** Extra stop rule (extractor: stop after a clean submit). */
 	shouldStop?: (message: AssistantMessage, toolResults: ToolResultMessage[]) => boolean;
+	/** Streamed answer text as it arrives (rika-learn: the roadmap skeleton
+	 *  is parsed line by line while the model is still writing). */
+	onTextDelta?: (delta: string) => void;
 	/** Debug: when set AND LH_PROVIDER_EVENTS=1, raw provider stream
 	 *  events append to data/debug/provider-events/<chatId>.jsonl (context
 	 *  "job:<role>"). Absent or env-off → no observer. */
@@ -117,6 +120,9 @@ export async function runSubagent(tools: AgentTool<any, any>[], opts: SubagentRu
 					break;
 				case "tool_execution_start":
 					opts.onToolStart?.(event.toolName, event.args);
+					break;
+				case "message_update":
+					if (event.assistantMessageEvent.type === "text_delta") opts.onTextDelta?.(event.assistantMessageEvent.delta);
 					break;
 			}
 		});

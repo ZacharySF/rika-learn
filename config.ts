@@ -29,6 +29,9 @@ export const PATHS = {
 	/** Debug artifacts (env-gated): data/debug/provider-events/<chatId>.jsonl
 	 * raw provider stream recordings (src/agent/provider-events.ts). */
 	debug: path.join(DATA_ROOT, "debug"),
+	/** rika-learn: roadmaps, Learn settings, spend ledger, YouTube quota,
+	 *  source cache, bridge outbox (src/store/learn.ts is the only writer). */
+	learn: path.join(DATA_ROOT, "learn"),
 } as const;
 
 // ─── Models ────────────────────────────────────────────────────────────────

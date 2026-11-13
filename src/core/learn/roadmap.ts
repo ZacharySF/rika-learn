@@ -341,12 +341,17 @@ export function extractJsonObject(answer: string): Json | null {
  *  topic id already in the roadmap (`existingTopicIds`); everything else
  *  is dropped, and only earlier topics of this stage count, so no cycle
  *  can form. */
+export interface StageFill {
+	topics: Topic[];
+	canon: CanonItem[];
+}
+
 export function parseStageFill(
 	answer: string,
 	stage: Pick<Stage, "id">,
 	depth: DepthId,
 	existingTopicIds: ReadonlySet<string>,
-): { topics: Topic[]; canon: CanonItem[] } | null {
+): StageFill | null {
 	const json = extractJsonObject(answer);
 	if (!json || !Array.isArray(json.topics)) return null;
 	const caps = clampToDepth(depth);
