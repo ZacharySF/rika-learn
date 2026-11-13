@@ -45,8 +45,16 @@ export const AUTH_KEYS: readonly AuthKeyInfo[] = [
 	{
 		id: "BRAVE_API_KEY",
 		label: "Brave Search",
-		description: "Web-search engine for the researcher sub-agent — the alternative to Tavily. Setting the key activates it.",
+		description: "Web-search engine for the researcher sub-agent — the alternative to Tavily. Setting the key activates it. Learn can also use it to fill gaps (Settings → Learn).",
 		docsUrl: "https://brave.com/search/api/",
+	},
+	{
+		// rika-learn: Learn's YouTube source (Data API v3, your own key — one
+		// search per roadmap stage, about 100 searches a day).
+		id: "YOUTUBE_API_KEY",
+		label: "YouTube Data API",
+		description: "Lets Learn find one good video per roadmap stage. Uses your own Google Cloud key; about 100 searches a day.",
+		docsUrl: "https://console.cloud.google.com/apis/library/youtube.googleapis.com",
 	},
 ] as const;
 
@@ -161,6 +169,11 @@ export function validateKeyShape(id: string, rawValue: string): KeyShapeResult {
 		case "BRAVE_API_KEY":
 			// No public format — a length floor + paste hygiene only.
 			return nonEmpty(20);
+		case "YOUTUBE_API_KEY":
+			// Google API keys are "AIza" + 35 characters.
+			return value.startsWith("AIza")
+				? nonEmpty(30)
+				: { ok: false, error: `${id} must start with "AIza" (a Google API key)` };
 		case "DEEPGRAM_API_KEY":
 			// No public format — the length floor only catches truncated pastes.
 			return nonEmpty(20);

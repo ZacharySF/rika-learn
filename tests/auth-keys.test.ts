@@ -12,10 +12,10 @@ import { describe, it } from "node:test";
 import { AUTH_KEYS, genericProviderKeyGuard, isKnownAuthKey, maskKey, validateKeyShape } from "../src/core/auth-keys.ts";
 
 describe("the catalog", () => {
-	it("is exactly the three CURATED app-service keys (provider keys live in the provider table)", () => {
+	it("is exactly the CURATED app-service keys (provider keys live in the provider table)", () => {
 		assert.deepEqual(
 			AUTH_KEYS.map((k) => k.id),
-			["DEEPGRAM_API_KEY", "TAVILY_API_KEY", "BRAVE_API_KEY"],
+			["DEEPGRAM_API_KEY", "TAVILY_API_KEY", "BRAVE_API_KEY", "YOUTUBE_API_KEY"],
 		);
 		for (const k of AUTH_KEYS) {
 			assert.ok(k.label.length > 0, `${k.id} has a label`);
@@ -34,6 +34,7 @@ describe("the catalog", () => {
 		assert.ok(isKnownAuthKey("DEEPGRAM_API_KEY"));
 		assert.ok(isKnownAuthKey("TAVILY_API_KEY"));
 		assert.ok(isKnownAuthKey("BRAVE_API_KEY"));
+		assert.ok(isKnownAuthKey("YOUTUBE_API_KEY"), "rika-learn: Learn's YouTube source");
 		assert.ok(!isKnownAuthKey("OPENROUTER_API_KEY"));
 		assert.ok(!isKnownAuthKey("OPENAI_API_KEY"), "provider vars are a separate surface");
 		assert.ok(!isKnownAuthKey("FUTURE_PLANS_TOKEN"));
@@ -53,6 +54,13 @@ describe("validateKeyShape (the 400 gate — curated keys)", () => {
 		assert.ok(validateKeyShape("BRAVE_API_KEY", "b".repeat(40)).ok);
 		assert.ok(!validateKeyShape("BRAVE_API_KEY", "b".repeat(19)).ok, "truncated paste");
 		assert.ok(!validateKeyShape("BRAVE_API_KEY", "has whitespace here").ok);
+	});
+
+	it("YouTube (rika-learn): Google API keys start with AIza, length floor, no whitespace", () => {
+		assert.ok(validateKeyShape("YOUTUBE_API_KEY", "AIza" + "x".repeat(35)).ok);
+		assert.ok(!validateKeyShape("YOUTUBE_API_KEY", "x".repeat(39)).ok, "wrong family");
+		assert.ok(!validateKeyShape("YOUTUBE_API_KEY", "AIza" + "x".repeat(10)).ok, "truncated paste");
+		assert.ok(!validateKeyShape("YOUTUBE_API_KEY", "AIza has whitespace in it here ok").ok);
 	});
 
 	it("Deepgram: no public format — a ≥20-char truncation guard, no whitespace", () => {
