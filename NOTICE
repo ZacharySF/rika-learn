@@ -1,0 +1,47 @@
+rika-learn
+==========
+
+rika-learn is a modified version of LearnHarness.
+
+  Upstream:  LearnHarness, https://github.com/amosblomqvist/learnharness
+  Base:      v0.3.8, commit 3dc88472eea41eed0d5e5f29c2f16f8d063c415b
+  Copyright: (C) 2026 Amos Blomqvist and the LearnHarness contributors
+  Licence:   GNU Affero General Public License v3.0 only (see LICENSE)
+
+The modifications are Copyright (C) 2026 ZacharySF and the rika-learn
+contributors, and are released under the same licence (AGPL-3.0-only).
+The full upstream history is kept in this repository's git history.
+
+This notice is given under section 5(a) of the AGPL: the work has been
+modified, and the changes below are dated relative to the base above.
+
+Modifications (2026-11-13 onwards)
+----------------------------------
+
+- Added "Learn anything": a roadmap builder. You type what you want to
+  learn and pick a depth (Normal, High, Super, Ultra, Ultraviolet). Up to
+  three quick questions settle your starting level, then a staged roadmap
+  streams in with topics, prerequisites and resources per stage.
+  New code lives in src/core/learn/, src/agent/learn/, src/store/learn.ts,
+  src/server/learn*.ts, app/learn/, app/api/learn/ and components/learn/.
+- Added source adapters for Wikipedia, MIT Learn/OCW, freeCodeCamp, Open
+  Library, official documentation (robots.txt respected), the YouTube
+  Data API v3 (your own key), arXiv, Semantic Scholar, Hacker News
+  (Algolia), GitHub awesome-lists and, optionally, Brave Search.
+- Added a timeline view and a star-map view for roadmaps, per-topic
+  progress, and a postMessage/HTTP bridge that hands Flashcards and
+  Calendar payloads to rika (docs/learn.md).
+- Added a daily spending limit for roadmap model calls, with a review
+  sheet when a build would go over it.
+- Added the "roadmap" background model role (defaults to the cheap
+  model slot) to the existing provider layer, a YouTube key entry to the
+  key list, a "Learn" settings section and a "Learn" entry in the sidebar.
+- Added rika module packaging: rika-module.json, scripts/package-module
+  and .github/workflows/module-release.yml.
+- The upstream desktop release workflow (.github/workflows/release.yml)
+  no longer runs on tag pushes; it can still be run by hand. Tags in this
+  fork publish the rika module instead.
+- The package version is 0.4.0-rika.1. The npm package name stays
+  "learnharness" so desktop data folders and provider attribution do not move.
+
+All other LearnHarness features are kept as they are.

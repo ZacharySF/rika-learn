@@ -1,8 +1,8 @@
 name: Desktop release
 
 on:
-  push:
-    tags: ["v*"]
+  # rika-learn fork: tags publish the rika module (module-release.yml), so
+  # the upstream desktop release no longer runs on tag pushes.
   # Manual runs are artifact-only, unsigned, and NEVER create a release.
   # Use this for the first Windows/Linux dress rehearsal without secrets.
   workflow_dispatch:
