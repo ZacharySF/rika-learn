@@ -50,6 +50,9 @@ export interface ServerEvents {
 	 *  the chat; the client mirrors it by disabling the composer/dock
 	 *  submit. */
 	"compaction-changed": { chatId: string; running: boolean };
+	/** rika-learn: a roadmap file changed (a stage streamed in, a stage
+	 *  filled, progress marked). Clients refetch GET /api/learn/roadmaps/:id. */
+	"learn-changed": { roadmapId: string };
 }
 
 export type ServerEventType = keyof ServerEvents;
@@ -66,12 +69,15 @@ export const SERVER_EVENT_TYPES = [
 	"subscriptions-changed",
 	"record-changed",
 	"compaction-changed",
+	"learn-changed",
 ] as const satisfies readonly ServerEventType[];
 
 /** One notification: the type discriminates the payload. */
-export type ServerEvent<K extends ServerEventType = ServerEventType> = {
-	type: K;
-} & ServerEvents[K];
+/** Distributive, so checking `event.type` narrows the payload (rika-learn:
+ *  needed once "learn-changed" carried no chatId). */
+export type ServerEvent<K extends ServerEventType = ServerEventType> = K extends ServerEventType
+	? { type: K } & ServerEvents[K]
+	: never;
 
 export type ServerEventListener = (event: ServerEvent) => void;
 

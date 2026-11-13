@@ -159,12 +159,14 @@ export function eagerStageIds(
 }
 
 /** Hard caps the roadmap validator applies to what the model writes. */
-export function clampToDepth(id: DepthId): {
+export interface DepthCaps {
 	maxStages: number;
 	maxTracks: number;
 	maxTopicsPerStage: number;
 	maxCanonPerStage: number;
-} {
+}
+
+export function clampToDepth(id: DepthId): DepthCaps {
 	const spec = depthSpec(id);
 	return {
 		maxStages: spec.stages.max,
